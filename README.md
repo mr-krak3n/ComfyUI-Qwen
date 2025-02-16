@@ -11,17 +11,20 @@ Used to load the language model. It has been tested with:
 - DeepSeek-R1-Distill-Qwen-7B
 
 ### QwenSampler
-Used for actual generation tasks. It is highly recommended to use a high `max_tokens` value when working with distilled models from DeepSeek. If you encounter VRAM limitations, enable the `keep_model_loaded` option to offload the model to CPU when not in use.
+Used for actual generation tasks. It is highly recommended to use a high `max_tokens` value when working with distilled models from DeepSeek. If you encounter VRAM limitations, disable the `keep_model_loaded` option to offload the model to CPU when not in use.
 
 ### DeepSeekResponseParser
 A parser for separating `<think>` and `</think>` tags from the resulting text.
 
 ## Installation and Model Setup
 
-1. Install the dependencies from `requirements.txt`. 
+1. Install the dependencies from `requirements.txt`.
+   ```bash
+   python.exe -m pip install -r requirements.txt
+   ```
    - **Note**: If you are not using `load_in_4bit` with the QwenLoader node, you do not need to install the `BitsAndBytes` package.
 
-2. Place the models inside subfolders within the `models/LLM` directory.
+3. Place the models inside subfolders within the `models/LLM` directory.
 
 ## Tested Models
 
