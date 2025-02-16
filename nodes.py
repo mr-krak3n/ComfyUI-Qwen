@@ -27,7 +27,7 @@ def load_model(model_name, device, dtype, attention, load_in_4bit):
     return model, tokenizer
 
 
-def send_message(model, device, tokenizer, history, max_tokens=512, seed=0, temperature=0.7, top_k=50, top_p=0.95, use_cache=False):
+def send_message(model, device, tokenizer, history, max_new_tokens=512, seed=0, temperature=0.7, top_k=50, top_p=0.95, use_cache=False):
     set_seed(seed)
     text = tokenizer.apply_chat_template(
         history,
@@ -38,7 +38,7 @@ def send_message(model, device, tokenizer, history, max_tokens=512, seed=0, temp
 
     generated_ids = model.generate(
         model_inputs.input_ids,
-        max_new_tokens=max_tokens,
+        max_new_tokens=max_new_tokens,
         do_sample=True,
         temperature=temperature,
         top_k=top_k,
@@ -121,7 +121,7 @@ class QwenSampler:
                 "system": ("STRING", {"multiline": True, "default": "Act like a prompt engineer for Stable Diffusion. You need to give me the most accturate prompt for my input. Don't introduce your message, give ONLY the prompt. Prompt must be around 150 words."}),
                 "prompt": ("STRING", {"multiline": True, "default": "Give me a prompt for Stable Diffusion"}),
                 "seed": ("INT", {"default": 0}),
-                "max_tokens": ("INT", {"default": 512, "min": 1}),
+                "max_new_tokens": ("INT", {"default": 512, "min": 1}),
                 "temperature": ("FLOAT", {"default": 0.7, "min": 0.0, "max": 1.0, "step": 0.01}),
                 "top_k": ("INT", {"default": 50, "min": 0}),
                 "top_p": ("FLOAT", {"default": 0.95, "min": 0.0, "max": 1.0, "step": 0.01}),
@@ -133,7 +133,7 @@ class QwenSampler:
     FUNCTION = "generate"
     CATEGORY = "Krak3n/qwen"
 
-    def generate(self, qwen_model, system, prompt, seed, max_tokens, temperature, top_k, top_p, use_cache, keep_model_loaded):
+    def generate(self, qwen_model, system, prompt, seed, max_new_tokens, temperature, top_k, top_p, use_cache, keep_model_loaded):
         qwen_model.model.to(qwen_model.device)
         history = [
             {
@@ -145,7 +145,7 @@ class QwenSampler:
                 "content": prompt
             }
         ]
-        message = send_message(qwen_model.model, qwen_model.device, qwen_model.tokenizer, history, max_tokens, seed, temperature, top_k, top_p, use_cache)
+        message = send_message(qwen_model.model, qwen_model.device, qwen_model.tokenizer, history, max_new_tokens, seed, temperature, top_k, top_p, use_cache)
         if not keep_model_loaded:
             offload_device = mm.unet_offload_device()
             qwen_model.model.to(offload_device)
