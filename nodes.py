@@ -6,22 +6,21 @@ import os
 
 model_directory = os.path.join(folder_paths.models_dir, "LLM")
 
-def load_model(model_name, device, dtype, attention, load_in_4bit):
+def load_model(model_name, quantization, device, dtype, attention):
     quantization_config = None
-    if load_in_4bit:
+    if quantization != "None":
         from transformers import BitsAndBytesConfig
         quantization_config = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_use_double_quant=True,
-            bnb_4bit_quant_type="nf4",
-            bnb_4bit_compute_dtype=torch.bfloat16
+            load_in_4bit = bool(quantization == "4-bit"),
+            load_in_8bit = bool(quantization == "8-bit"),
         )
+
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
         torch_dtype=dtype,
         device_map=device,
         attn_implementation=attention,
-        **({ "quantization_config": quantization_config } if load_in_4bit else {}),
+        **({ "quantization_config": quantization_config } if quantization != "None" else {}),
     )
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     generator = pipeline(task="text-generation", model=model, tokenizer=tokenizer)
@@ -54,21 +53,21 @@ class QwenLoader:
         return {
             "required": {
                 "model_name": ([d for d in os.listdir(model_directory) if os.path.isdir(os.path.join(model_directory, d))],),
+                "quantization": (['None', '8-bit', '4-bit'],),
                 "precision": (['fp16','bf16','fp32'],),
                 "attention": (['flash_attention_2', 'sdpa', 'eager'], {"default": 'sdpa'}),
-                "load_in_4bit": ("BOOLEAN", {"default": False}),
             }
         }
     RETURN_TYPES = ("QWEN_MODEL",)
     FUNCTION = "load"
     CATEGORY = "Krak3n/qwen"
 
-    def load(self, model_name, precision, attention, load_in_4bit):
+    def load(self, model_name, quantization, precision, attention):
         device = mm.get_torch_device()
         dtype = {"bf16": torch.bfloat16, "fp16": torch.float16, "fp32": torch.float32}[precision]
         model_path = os.path.join(model_directory, model_name)
 
-        generator = load_model(model_path, device, dtype, attention, load_in_4bit)
+        generator = load_model(model_path, quantization, device, dtype, attention)
 
         return (QwenModel(generator_pipeline=generator),)
 
