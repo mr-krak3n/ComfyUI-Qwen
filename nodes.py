@@ -1,4 +1,4 @@
-from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
+from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline, set_seed
 import torch
 import comfy.model_management as mm
 import folder_paths
@@ -24,43 +24,28 @@ def load_model(model_name, device, dtype, attention, load_in_4bit):
         **({ "quantization_config": quantization_config } if load_in_4bit else {}),
     )
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    return model, tokenizer
+    generator = pipeline(task="text-generation", model=model, tokenizer=tokenizer)
+
+    return generator
 
 
-def send_message(model, device, tokenizer, history, max_new_tokens=512, seed=0, temperature=0.7, top_k=50, top_p=0.95, use_cache=False):
+def send_message(generator, history, max_new_tokens=512, seed=0, temperature=0.7, top_k=50, top_p=0.95, use_cache=False):
     set_seed(seed)
-    text = tokenizer.apply_chat_template(
-        history,
-        tokenize=False,
-        add_generation_prompt=True
-    )
-    model_inputs = tokenizer([text], return_tensors="pt").to(device)
-
-    generated_ids = model.generate(
-        model_inputs.input_ids,
-        max_new_tokens=max_new_tokens,
-        do_sample=True,
-        temperature=temperature,
-        top_k=top_k,
-        top_p=top_p,
-        use_cache=use_cache,
-        attention_mask=model_inputs.attention_mask,
-        pad_token_id=tokenizer.eos_token_id
-    )
-    generated_ids = [
-        output_ids[len(input_ids):] for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)
-    ]
-
-    response = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
-    return response
+    kwargs = {
+        'max_new_tokens' : max_new_tokens,
+        'do_sample' : True,
+        'temperature': temperature,
+        'top_k' : top_k,
+        'top_p' : top_p,
+        'use_cache' : use_cache,
+    }
+    response = generator(history, **kwargs)
+    return response[0]['generated_text'][-1]['content']
 
 
 class QwenModel:
-    def __init__(self, model, tokenizer, device, dtype):
-        self.model = model
-        self.tokenizer = tokenizer
-        self.device = device
-        self.dtype = dtype
+    def __init__(self, generator_pipeline):
+        self.generator_pipeline = generator_pipeline
 
 
 class QwenLoader:
@@ -83,9 +68,9 @@ class QwenLoader:
         dtype = {"bf16": torch.bfloat16, "fp16": torch.float16, "fp32": torch.float32}[precision]
         model_path = os.path.join(model_directory, model_name)
 
-        model,tokenizer = load_model(model_path, device, dtype, attention, load_in_4bit)
+        generator = load_model(model_path, device, dtype, attention, load_in_4bit)
 
-        return (QwenModel(model, tokenizer, device, dtype),)
+        return (QwenModel(generator_pipeline=generator),)
 
 
 class DeepSeekResponseParser:
@@ -134,7 +119,8 @@ class QwenSampler:
     CATEGORY = "Krak3n/qwen"
 
     def generate(self, qwen_model, system, prompt, seed, max_new_tokens, temperature, top_k, top_p, use_cache, keep_model_loaded):
-        qwen_model.model.to(qwen_model.device)
+        model = qwen_model.generator_pipeline.model
+        model.to(mm.get_torch_device())
         history = [
             {
                 "role": "system", 
@@ -145,10 +131,9 @@ class QwenSampler:
                 "content": prompt
             }
         ]
-        message = send_message(qwen_model.model, qwen_model.device, qwen_model.tokenizer, history, max_new_tokens, seed, temperature, top_k, top_p, use_cache)
+        message = send_message(qwen_model.generator_pipeline, history, max_new_tokens, seed, temperature, top_k, top_p, use_cache)
         if not keep_model_loaded:
-            offload_device = mm.unet_offload_device()
-            qwen_model.model.to(offload_device)
+            model.to(mm.unet_offload_device())
             mm.soft_empty_cache()
 
         return (message, )
