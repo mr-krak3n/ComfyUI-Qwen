@@ -11,8 +11,18 @@ def load_model(model_name, quantization, device, dtype, attention):
     if quantization != "None":
         from transformers import BitsAndBytesConfig
         quantization_config = BitsAndBytesConfig(
-            load_in_4bit = bool(quantization == "4-bit"),
-            load_in_8bit = bool(quantization == "8-bit"),
+            **({ 
+                "load_in_4bit": True,
+                "bnb_4bit_use_double_quant": True,
+                "bnb_4bit_quant_type": "nf4",
+                "bnb_4bit_compute_dtype": torch.bfloat16
+            } if bool(quantization == "double-4bit") else {}),
+            **({ 
+                "load_in_4bit": True,
+            } if bool(quantization == "4bit") else {}),
+            **({ 
+                "load_in_8bit": True,
+            } if bool(quantization == "8bit") else {}),
         )
 
     model = AutoModelForCausalLM.from_pretrained(
@@ -53,7 +63,7 @@ class QwenLoader:
         return {
             "required": {
                 "model_name": ([d for d in os.listdir(model_directory) if os.path.isdir(os.path.join(model_directory, d))],),
-                "quantization": (['None', '8-bit', '4-bit'],),
+                "quantization": (['None', '8bit', '4bit', 'double-4bit'],),
                 "precision": (['fp16','bf16','fp32'],),
                 "attention": (['flash_attention_2', 'sdpa', 'eager'], {"default": 'sdpa'}),
             }
